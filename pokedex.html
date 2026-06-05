@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ポケモン図鑑</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --card-bg: #16213e;
+    --accent: #e94560;
+    --text: #eaeaea;
+    --sub: #8892b0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; min-height: 100vh; }
+
+  header {
+    background: var(--card-bg);
+    padding: 20px;
+    text-align: center;
+    border-bottom: 2px solid var(--accent);
+    position: sticky; top: 0; z-index: 100;
+  }
+  header h1 { font-size: 1.8rem; color: var(--accent); letter-spacing: 2px; }
+  #search {
+    margin-top: 12px;
+    padding: 8px 16px;
+    width: 280px;
+    border-radius: 20px;
+    border: 1px solid var(--accent);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 1rem;
+    outline: none;
+  }
+
+  #loading {
+    text-align: center;
+    padding: 60px;
+    font-size: 1.2rem;
+    color: var(--sub);
+  }
+  #progress { margin-top: 10px; color: var(--accent); }
+
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px;
+    padding: 24px;
+  }
+
+  .card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 16px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform .2s, box-shadow .2s;
+    border: 1px solid transparent;
+  }
+  .card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(233,69,96,.3); border-color: var(--accent); }
+  .card img { width: 80px; height: 80px; image-rendering: pixelated; }
+  .card .num { font-size: .75rem; color: var(--sub); }
+  .card .name { font-size: .95rem; font-weight: 600; text-transform: capitalize; margin: 4px 0; }
+  .card .types { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
+
+  .badge {
+    font-size: .65rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: capitalize;
+    font-weight: 600;
+  }
+
+  /* モーダル */
+  #overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.7);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  #overlay.open { display: flex; }
+  #modal {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 28px;
+    width: 360px;
+    max-width: 92vw;
+    position: relative;
+    border: 1px solid var(--accent);
+  }
+  #modal-close {
+    position: absolute; top: 12px; right: 16px;
+    background: none; border: none; color: var(--sub);
+    font-size: 1.4rem; cursor: pointer;
+  }
+  #modal-img { width: 120px; height: 120px; image-rendering: pixelated; display: block; margin: 0 auto 8px; }
+  #modal-name { text-align: center; font-size: 1.4rem; font-weight: 700; text-transform: capitalize; }
+  #modal-num { text-align: center; color: var(--sub); font-size: .85rem; margin-bottom: 8px; }
+  #modal-types { display: flex; gap: 6px; justify-content: center; margin-bottom: 16px; }
+  .info-row { display: flex; justify-content: space-between; font-size: .85rem; margin-bottom: 6px; color: var(--sub); }
+  .info-row span:last-child { color: var(--text); }
+  .stat-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: .8rem; }
+  .stat-name { width: 90px; text-align: right; color: var(--sub); text-transform: capitalize; }
+  .stat-bar-bg { flex: 1; background: #333; border-radius: 4px; height: 6px; overflow: hidden; }
+  .stat-bar { height: 100%; border-radius: 4px; background: var(--accent); }
+  .stat-val { width: 28px; text-align: right; }
+  .section-title { font-size: .75rem; color: var(--sub); text-transform: uppercase; letter-spacing: 1px; margin: 14px 0 6px; }
+  .abilities { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ability-tag {
+    background: rgba(233,69,96,.15);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 3px 10px;
+    font-size: .8rem;
+    text-transform: capitalize;
+  }
+  .ability-tag.hidden { opacity: .5; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#x25C6; ポケモン図鑑</h1>
+  <input id="search" type="text" placeholder="名前 or 番号で検索…">
+</header>
+
+<div id="loading">読み込み中… <div id="progress"></div></div>
+<div id="grid" style="display:none"></div>
+
+<div id="overlay">
+  <div id="modal">
+    <button id="modal-close">&#x2715;</button>
+    <img id="modal-img" src="" alt="">
+    <div id="modal-name"></div>
+    <div id="modal-num"></div>
+    <div id="modal-types"></div>
+    <div class="info-row"><span>高さ</span><span id="modal-height"></span></div>
+    <div class="info-row"><span>重さ</span><span id="modal-weight"></span></div>
+    <div class="info-row"><span>基礎経験値</span><span id="modal-exp"></span></div>
+    <div class="section-title">ステータス</div>
+    <div id="modal-stats"></div>
+    <div class="section-title">特性</div>
+    <div id="modal-abilities" class="abilities"></div>
+  </div>
+</div>
+
+<script>
+const TYPE_COLORS = {
+  normal:'#A8A878', fire:'#F08030', water:'#6890F0', grass:'#78C850',
+  electric:'#F8D030', ice:'#98D8D8', fighting:'#C03028', poison:'#A040A0',
+  ground:'#E0C068', flying:'#A890F0', psychic:'#F85888', bug:'#A8B820',
+  rock:'#B8A038', ghost:'#705898', dragon:'#7038F8', dark:'#705848',
+  steel:'#B8B8D0', fairy:'#EE99AC'
+};
+
+const STAT_NAMES = {
+  hp:'HP', attack:'こうげき', defense:'ぼうぎょ',
+  'special-attack':'とくこう', 'special-defense':'とくぼう', speed:'すばやさ'
+};
+
+let allPokemon = [];
+
+function badge(type) {
+  const b = document.createElement('span');
+  b.className = 'badge';
+  b.textContent = type;
+  b.style.background = TYPE_COLORS[type] || '#888';
+  b.style.color = '#fff';
+  return b;
+}
+
+function renderGrid(list) {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  list.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const typesHtml = p.types.map(t =>
+      `<span class="badge" style="background:${TYPE_COLORS[t]||'#888'};color:#fff">${t}</span>`
+    ).join('');
+    card.innerHTML = `
+      <div class="num">#${String(p.id).padStart(3,'0')}</div>
+      <img src="${p.sprite}" alt="${p.name}" loading="lazy">
+      <div class="name">${p.name}</div>
+      <div class="types">${typesHtml}</div>
+    `;
+    card.addEventListener('click', () => openModal(p));
+    grid.appendChild(card);
+  });
+}
+
+function openModal(p) {
+  document.getElementById('modal-img').src = p.sprite;
+  document.getElementById('modal-name').textContent = p.name;
+  document.getElementById('modal-num').textContent = `#${String(p.id).padStart(3,'0')}`;
+  document.getElementById('modal-height').textContent = `${p.height / 10} m`;
+  document.getElementById('modal-weight').textContent = `${p.weight / 10} kg`;
+  document.getElementById('modal-exp').textContent = p.base_experience;
+
+  const typesEl = document.getElementById('modal-types');
+  typesEl.innerHTML = '';
+  p.types.forEach(t => typesEl.appendChild(badge(t)));
+
+  const statsEl = document.getElementById('modal-stats');
+  statsEl.innerHTML = '';
+  p.stats.forEach(s => {
+    const pct = Math.min(100, Math.round(s.value / 255 * 100));
+    statsEl.innerHTML += `
+      <div class="stat-row">
+        <div class="stat-name">${STAT_NAMES[s.name] || s.name}</div>
+        <div class="stat-bar-bg"><div class="stat-bar" style="width:${pct}%"></div></div>
+        <div class="stat-val">${s.value}</div>
+      </div>`;
+  });
+
+  const abEl = document.getElementById('modal-abilities');
+  abEl.innerHTML = '';
+  p.abilities.forEach(a => {
+    const tag = document.createElement('span');
+    tag.className = 'ability-tag' + (a.hidden ? ' hidden' : '');
+    tag.textContent = a.name + (a.hidden ? ' (隠)' : '');
+    abEl.appendChild(tag);
+  });
+
+  document.getElementById('overlay').classList.add('open');
+}
+
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closeModal();
+});
+document.getElementById('modal-close').addEventListener('click', closeModal);
+function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+
+document.getElementById('search').addEventListener('input', e => {
+  const q = e.target.value.trim().toLowerCase();
+  const filtered = allPokemon.filter(p =>
+    p.name.includes(q) || String(p.id).includes(q)
+  );
+  renderGrid(filtered);
+});
+
+async function fetchPokemon(id) {
+  const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`);
+  const d = await res.json();
+  return {
+    id: d.id,
+    name: d.name,
+    sprite: d.sprites.front_default,
+    types: d.types.map(t => t.type.name),
+    height: d.height,
+    weight: d.weight,
+    base_experience: d.base_experience,
+    stats: d.stats.map(s => ({ name: s.stat.name, value: s.base_stat })),
+    abilities: d.abilities.map(a => ({ name: a.ability.name, hidden: a.is_hidden }))
+  };
+}
+
+async function load() {
+  const progEl = document.getElementById('progress');
+  const TOTAL = 151;
+  let done = 0;
+
+  const BATCH = 20;
+  for (let start = 1; start <= TOTAL; start += BATCH) {
+    const ids = [];
+    for (let i = start; i < Math.min(start + BATCH, TOTAL + 1); i++) ids.push(i);
+    const results = await Promise.all(ids.map(fetchPokemon));
+    allPokemon.push(...results);
+    done += results.length;
+    progEl.textContent = `${done} / ${TOTAL}`;
+  }
+
+  allPokemon.sort((a, b) => a.id - b.id);
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('grid').style.display = 'grid';
+  renderGrid(allPokemon);
+}
+
+load();
+</script>
+</body>
+</html>
